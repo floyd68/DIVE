@@ -19,6 +19,9 @@ namespace DIVE
 		, m_pImage(nullptr)
 		, m_loader( std::make_unique<ImageLoader>() )
 		, m_pthread_scan(nullptr)
+		, m_pthread_load(nullptr)
+		, m_hWnd( NULL )
+		, m_nIndex( -1 )
 	{
 		HRESULT hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &m_pDirect2dFactory);
 	}
@@ -41,7 +44,7 @@ namespace DIVE
 	bool ImageViewer::Initialize(HWND hWnd)
 	{
 		HRESULT hr = S_OK;
-
+		m_hWnd = hWnd;
 		RECT rc;
 		GetClientRect(hWnd, &rc);
 
@@ -92,8 +95,143 @@ namespace DIVE
 			);
 		}
 
+		int nX = 0;
+		int nY = rcClient.bottom - 260;
+		for (auto& bmp : m_vecBitmaps)
+		{
+			if (bmp.fAlpha > 0.0f && bmp.pBitmap)
+			{
+				m_pRenderTarget->DrawBitmap(
+					bmp.pBitmap,
+					D2D1::RectF( nX, nY, nX + 60, nY + 40 ),
+					bmp.fAlpha,
+					D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR
+				);
+			}
+			nX += 64;
+			if (nX + 60 > rcClient.right)
+			{
+				nX = 0;
+				nY += 44;
+			}
+		}
+
 		m_pRenderTarget->EndDraw();
 		ValidateRect(hWnd, nullptr);
+	}
+
+	void ImageViewer::SetFiles(std::vector <ThumbnailInfo>&& vecBitmaps)
+	{
+		m_vecBitmaps = std::move(vecBitmaps);
+
+		int nIndex = 0;
+		for (auto& bmp : m_vecBitmaps)
+		{
+			if (bmp.strFileName == m_wstrFileName)
+			{
+				m_nIndex = nIndex;
+				bmp.fAlpha = 1.0f;
+				bmp.pBitmap = m_pImage;
+				PostMessage(m_hWnd, WM_PAINT, 0, 0);
+				break;
+			}
+			++nIndex;
+		}
+		if (!m_pthread_load)
+		{
+			m_pthread_load = new std::thread(
+				[this]()
+				{
+					for (auto& bmp : m_vecBitmaps)
+					{
+						if (bmp.pBitmap == nullptr)
+						{
+							HRESULT hr = S_OK;
+
+							IWICBitmapSource* pWICBitmap = m_loader->Load(bmp.strFileName.c_str());
+
+							if (SUCCEEDED(hr))
+								hr = m_pRenderTarget->CreateBitmapFromWicBitmap(
+									pWICBitmap,
+									NULL,
+									&bmp.pBitmap
+								);
+							if (SUCCEEDED(hr))
+							{
+								bmp.fAlpha = 1.0f;
+								PostMessage(m_hWnd, WM_PAINT, 0, 0);
+							}
+							pWICBitmap->Release();
+						}
+
+					}
+
+				}
+			);
+
+		}
+	}
+
+	void ImageViewer::PrevImage()
+	{
+		if (m_nIndex > 0)
+		{
+			m_nIndex--;
+			m_pImage = m_vecBitmaps[m_nIndex].pBitmap;
+			m_szImage = SIZE{ (long)m_pImage->GetSize().width, (long)m_pImage->GetSize().height };
+
+			if (m_szClient.cx < m_szImage.cx || m_szClient.cy < m_szImage.cy)
+			{
+				m_nScale = std::min(
+					m_szClient.cx * 1000 / m_szImage.cx,
+					m_szClient.cy * 1000 / m_szImage.cy);
+			}
+			else if (m_szImage.cx < m_szClient.cx / 2 || m_szImage.cy < m_szClient.cy / 2)
+			{
+				m_nScale = std::min(
+					m_szClient.cx * 1000 / 2 / m_szImage.cx,
+					m_szClient.cy * 1000 * 3 / 4 / m_szImage.cy);
+			}
+
+			m_rcView = D2D1::RectF(
+				(m_szClient.cx - m_szImage.cx * m_nScale / 1000.0f) / 2,
+				(m_szClient.cy - m_szImage.cy * m_nScale / 1000.0f) / 2,
+				(m_szClient.cx + m_szImage.cx * m_nScale / 1000.0f) / 2,
+				(m_szClient.cy + m_szImage.cy * m_nScale / 1000.0f) / 2);
+		}
+		SendMessage(m_hWnd, WM_PAINT, 0, 0);
+
+	}
+
+	void ImageViewer::NextImage()
+	{
+		if (m_nIndex < m_vecBitmaps.size() - 1 && m_nIndex >= 0)
+		{
+			m_nIndex++;
+			m_pImage = m_vecBitmaps[m_nIndex].pBitmap;
+			m_szImage = SIZE{ (long)m_pImage->GetSize().width, (long)m_pImage->GetSize().height };
+
+			if (m_szClient.cx < m_szImage.cx || m_szClient.cy < m_szImage.cy)
+			{
+				m_nScale = std::min(
+					m_szClient.cx * 1000 / m_szImage.cx,
+					m_szClient.cy * 1000 / m_szImage.cy);
+			}
+			else if (m_szImage.cx < m_szClient.cx / 2 || m_szImage.cy < m_szClient.cy / 2)
+			{
+				m_nScale = std::min(
+					m_szClient.cx * 1000 / 2 / m_szImage.cx,
+					m_szClient.cy * 1000 * 3 / 4 / m_szImage.cy);
+			}
+
+			m_rcView = D2D1::RectF(
+				(m_szClient.cx - m_szImage.cx * m_nScale / 1000.0f) / 2,
+				(m_szClient.cy - m_szImage.cy * m_nScale / 1000.0f) / 2,
+				(m_szClient.cx + m_szImage.cx * m_nScale / 1000.0f) / 2,
+				(m_szClient.cy + m_szImage.cy * m_nScale / 1000.0f) / 2);
+		}
+		SendMessage(m_hWnd, WM_PAINT, 0, 0);
+
 	}
 
 	bool ImageViewer::Load(const wchar_t* wszFileName)
@@ -113,6 +251,7 @@ namespace DIVE
 
 		m_wstrPath = wszDrive;
 		m_wstrPath += wszPath;
+		m_wstrFileName = wszFileName;
 
 		
 		m_nScale = 1000;
@@ -134,7 +273,7 @@ namespace DIVE
 			m_pthread_scan = new std::thread(
 				[this](const std::wstring& strPath)
 				{
-					std::wstring strFiles = strPath + L"\*.*";
+					std::wstring strFiles = strPath + L"\\*.*";
 					WIN32_FIND_DATA findData;
 					std::vector <ThumbnailInfo> vecFiles;
 
@@ -156,8 +295,9 @@ namespace DIVE
 									ends_with( wszTemp, L".dds" ) ||
 									ends_with( wszTemp, L".png" ) ||
 									ends_with( wszTemp, L".tif" ) ||
+									ends_with( wszTemp, L".jpg") ||
 									ends_with( wszTemp, L".ico" ))
-									vecFiles.push_back({ findData.cFileName });
+									vecFiles.push_back({ strPath + findData.cFileName });
 							}
 							bFind = FindNextFile(hFind, &findData);
 						}

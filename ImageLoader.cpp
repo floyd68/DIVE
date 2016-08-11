@@ -148,6 +148,7 @@ namespace DIVE
 
 	bool ImageLoader::CanLoad(const wchar_t* wszFileName)
 	{
+		return true;
 
 	}
 	IWICBitmapSource* ImageLoader::Load(const wchar_t* wszFileName)
@@ -199,8 +200,7 @@ namespace DIVE
 		}
 		WICPixelFormatGUID guidPixelFormat;
 		hr = pWICBitmap->GetPixelFormat(&guidPixelFormat);
-		if (guidPixelFormat != GUID_WICPixelFormat32bppBGRA &&
-			guidPixelFormat != GUID_WICPixelFormat32bppPBGRA)
+		if (guidPixelFormat != GUID_WICPixelFormat32bppPBGRA)
 		{
 			IWICFormatConverter *pConverter = NULL;
 

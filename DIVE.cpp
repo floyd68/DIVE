@@ -105,7 +105,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 
    s_loader->Initialize( hWnd );
    s_loader->Capture(width, height);
-   s_loader->Load(L"sky.tga");
+   s_loader->Load(L"D:\\사진\\가족사진 F80EXR\\DSCF0001.JPG");
    
    ShowWindow(hWnd, nCmdShow);
    UpdateWindow(hWnd);
@@ -119,6 +119,16 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     {
     case WM_PAINT:
 		s_loader->Draw(hWnd); break;
+
+	case WM_KEYDOWN:
+		switch (wParam)
+		{
+		case VK_LEFT:
+			s_loader->PrevImage(); break;
+		case VK_RIGHT:
+			s_loader->NextImage(); break;
+		}
+		break;
 
 	case WM_ERASEBKGND:
 		return TRUE;
