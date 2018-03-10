@@ -2,7 +2,6 @@
 #include "ImageLoader.h"
 #include "tga.h"
 #include <dwrite.h>
-#include <wincodec.h>
 #include <d2d1helper.h>
 #include <d2d1effects.h>
 #include <string>
@@ -12,16 +11,16 @@ namespace DIVE
 {
 
 	ImageLoader::ImageLoader()
-		: m_pImagingFactory(NULL)
 	{
-		HRESULT hr = CoCreateInstance(CLSID_WICImagingFactory, NULL,
+		HRESULT hr;
+
+		hr = CoCreateInstance(CLSID_WICImagingFactory, NULL,
 			CLSCTX_INPROC_SERVER, IID_IWICImagingFactory,
-			(LPVOID*)&m_pImagingFactory);
+			(LPVOID*)&m_pWICFactory);
+		
 	}
 	ImageLoader::~ImageLoader()
 	{
-		if (m_pImagingFactory)
-			m_pImagingFactory->Release();
 	}
 
 	std::string UTF16toMBCS(const wchar_t* wszChar)
@@ -146,11 +145,6 @@ namespace DIVE
 		return result;
 	}
 
-	bool ImageLoader::CanLoad(const wchar_t* wszFileName)
-	{
-		return true;
-
-	}
 	IWICBitmapSource* ImageLoader::Load(const wchar_t* wszFileName)
 	{
 		wchar_t wszTemp[256];
@@ -161,7 +155,7 @@ namespace DIVE
 
 		HRESULT hr = S_OK;
 
-		IWICBitmapSource* pWICBitmap = nullptr;
+		IWICBitmapSource* pWICBitmap;
 
 		if (wcsstr(wszTemp, L".tga"))
 		{
@@ -170,17 +164,17 @@ namespace DIVE
 			tga_data.flags = TGA_IMAGE_DATA | TGA_FLIP_VERTICAL;
 
 			TGAReadImage(pTGA, &tga_data);
-			hr = TGA2BitmapSource(pTGA, &tga_data, m_pImagingFactory, &pWICBitmap);
+			hr = TGA2BitmapSource(pTGA, &tga_data, m_pWICFactory, &pWICBitmap);
 
 			free(tga_data.img_data);
 			TGAClose(pTGA);
 		}
 		else
 		{
-			IWICBitmapDecoder *pDecoder = nullptr;
-			IWICBitmapFrameDecode* pIDecoderFrame = nullptr;
+			CComPtr<IWICBitmapDecoder> pDecoder = nullptr;
+			CComPtr<IWICBitmapFrameDecode> pIDecoderFrame = nullptr;
 
-			hr = m_pImagingFactory->CreateDecoderFromFilename(
+			hr = m_pWICFactory->CreateDecoderFromFilename(
 				wszFileName,
 				NULL,
 				GENERIC_READ,
@@ -192,19 +186,14 @@ namespace DIVE
 
 			if (SUCCEEDED(hr))
 				hr = pIDecoderFrame->QueryInterface(IID_IWICBitmapSource, (void **)&pWICBitmap);
-
-			if (pDecoder)
-				pDecoder->Release();
-			if (pIDecoderFrame)
-				pIDecoderFrame->Release();
 		}
 		WICPixelFormatGUID guidPixelFormat;
 		hr = pWICBitmap->GetPixelFormat(&guidPixelFormat);
 		if (guidPixelFormat != GUID_WICPixelFormat32bppPBGRA)
 		{
-			IWICFormatConverter *pConverter = NULL;
+			CComPtr<IWICFormatConverter> pConverter = NULL;
 
-			hr = m_pImagingFactory->CreateFormatConverter(&pConverter);
+			hr = m_pWICFactory->CreateFormatConverter(&pConverter);
 			if (SUCCEEDED(hr))
 				hr = pConverter->Initialize(
 					pWICBitmap,
@@ -215,14 +204,33 @@ namespace DIVE
 					WICBitmapPaletteTypeMedianCut
 				);
 			if (SUCCEEDED(hr))
-			{
-				pWICBitmap->Release();
 				hr = pConverter->QueryInterface(IID_IWICBitmapSource, (void **)&pWICBitmap);
-			}
-			if (pConverter)
-				pConverter->Release();
 		}
 
 		return pWICBitmap;
+	}
+	IWICBitmapSource* ImageLoader::LoadThumbnail(unsigned int width, unsigned int height, const wchar_t* szFileName)
+	{
+		CComPtr<IWICBitmapSource> pWICBitmap = Load(szFileName);
+
+		if (pWICBitmap)
+		{
+			HRESULT hr;
+
+			IWICBitmapScaler* pWICScaler;
+
+			hr = m_pWICFactory->CreateBitmapScaler(&pWICScaler);
+			if (SUCCEEDED(hr))
+				hr = pWICScaler->Initialize(pWICBitmap, width, height, WICBitmapInterpolationModeNearestNeighbor);
+			if (SUCCEEDED(hr))
+				return pWICScaler;
+			else
+			{
+				pWICScaler->Release();
+				return nullptr;
+			}
+		}
+		else
+			return nullptr;
 	}
 }

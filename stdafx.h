@@ -16,6 +16,9 @@
 #include <malloc.h>
 #include <memory.h>
 #include <tchar.h>
+#include <atlbase.h>
+#include <wincodec.h>
 
+#include <d2d1_1.h>
 
 // TODO: reference additional headers your program requires here

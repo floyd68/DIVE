@@ -2,7 +2,8 @@
 
 #include <string>
 #include <windowsx.h>
-#include <d2d1_1.h>
+
+#include <Wincodec.h>
 
 namespace DIVE
 {
@@ -14,10 +15,10 @@ namespace DIVE
 		~ImageLoader();
 
 		IWICBitmapSource* Load(const wchar_t* szFileName);
-		bool CanLoad(const wchar_t* wszFileName);
+		IWICBitmapSource* LoadThumbnail( unsigned int width, unsigned int height, const wchar_t* szFileName);
 
 	private:
-		IWICImagingFactory* m_pImagingFactory;
+		CComPtr<IWICImagingFactory> m_pWICFactory;
 	};
 
 }

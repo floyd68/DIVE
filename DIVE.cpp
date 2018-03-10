@@ -46,13 +46,21 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     }
 
 
-    MSG msg;
+	MSG msg = { 0 };
 
     // Main message loop:
-    while (GetMessage(&msg, nullptr, 0, 0))
+    while ( WM_QUIT != msg.message)
     {
-		TranslateMessage(&msg);
-        DispatchMessage(&msg);
+		if (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE))
+		{
+			TranslateMessage(&msg);
+			DispatchMessage(&msg);
+		}
+		else
+		{
+			s_loader->Render();
+			_sleep(0);
+		}
     }
 	s_loader->Destroy();
 	delete s_loader;
@@ -105,7 +113,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 
    s_loader->Initialize( hWnd );
    s_loader->Capture(width, height);
-   s_loader->Load(L"D:\\사진\\가족사진 F80EXR\\DSCF0001.JPG");
+   s_loader->Load(L"D:\\Photos\\가족사진 이것저것\\couple.jpg");
    
    ShowWindow(hWnd, nCmdShow);
    UpdateWindow(hWnd);
@@ -115,10 +123,15 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
+	PAINTSTRUCT ps;
+	HDC hdc;
+
     switch (message)
     {
     case WM_PAINT:
-		s_loader->Draw(hWnd); break;
+		hdc = BeginPaint(hWnd, &ps);
+		EndPaint(hWnd, &ps);
+		break;
 
 	case WM_KEYDOWN:
 		switch (wParam)
@@ -127,6 +140,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			s_loader->PrevImage(); break;
 		case VK_RIGHT:
 			s_loader->NextImage(); break;
+		case VK_ESCAPE:
+			PostQuitMessage(0); break;
 		}
 		break;
 
